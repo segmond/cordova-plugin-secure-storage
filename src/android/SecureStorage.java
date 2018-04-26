@@ -225,6 +225,36 @@ public class SecureStorage extends CordovaPlugin {
             callbackContext.success(new JSONArray(getStorage(service).keys()));
             return true;
         }
+        if ("getKeyValPair".equals(action)) {
+            String service = args.getString(0);
+            String keys[] = getStorage(service).keys();
+            int index = 0;
+            List<List<String>> keyParis = Lists.newArrayList();
+            for (key in keys) {
+              String value = getStorage(service).fetch(key);
+              JSONObject json = new JSONObject(value);
+              final byte[] encKey = Base64.decode(json.getString("key"), Base64.DEFAULT);
+              JSONObject data = json.getJSONObject("value");
+              final byte[] ct = Base64.decode(data.getString("ct"), Base64.DEFAULT);
+              final byte[] iv = Base64.decode(data.getString("iv"), Base64.DEFAULT);
+              final byte[] adata = Base64.decode(data.getString("adata"), Base64.DEFAULT);
+              cordova.getThreadPool().execute(new Runnable() {
+                  public void run() {
+                      try {
+                          byte[] decryptedKey = RSA.decrypt(encKey, service2alias(service));
+                          String decrypted = new String(AES.decrypt(ct, decryptedKey, iv, adata));
+                          keyPairs.add(List.newArrayList(key, decrypted, String.valueOf(index)));
+                      } catch (Exception e) {
+                          Log.e(TAG, "Decrypt (RSA/AES) failed :", e);
+                          callbackContext.error(e.getMessage());
+                      }
+                  }
+              });
+            }
+
+            callbackContext.success(new JSONArray(keyPairs));
+            return true;
+        }
         if ("clear".equals(action)) {
             String service = args.getString(0);
             getStorage(service).clear();
